@@ -1,4 +1,4 @@
-/*global WildRydes _config AmazonCognitoIdentity AWSCognito*/
+/*global WildRydes _config AmazonCognitoIdentity AWSCognito CryptoJS*/
 
 var WildRydes = window.WildRydes || {};
 
@@ -14,6 +14,7 @@ var WildRydes = window.WildRydes || {};
 
     if (!(_config.cognito.userPoolId &&
           _config.cognito.userPoolClientId &&
+          _config.cognito.userPoolClientSecret &&
           _config.cognito.region)) {
         $('#noCognitoMessage').show();
         return;
@@ -23,6 +24,11 @@ var WildRydes = window.WildRydes || {};
 
     if (typeof AWSCognito !== 'undefined') {
         AWSCognito.config.region = _config.cognito.region;
+    }
+
+    // Function to calculate secret hash
+    function calculateSecretHash(username, clientId, clientSecret) {
+        return CryptoJS.HmacSHA256(username + clientId, clientSecret).toString(CryptoJS.enc.Base64);
     }
 
     WildRydes.signOut = function signOut() {
@@ -47,7 +53,6 @@ var WildRydes = window.WildRydes || {};
         }
     });
 
-
     /*
      * Cognito User Pool functions
      */
@@ -59,21 +64,29 @@ var WildRydes = window.WildRydes || {};
         };
         var attributeEmail = new AmazonCognitoIdentity.CognitoUserAttribute(dataEmail);
 
-        userPool.signUp(toUsername(email), password, [attributeEmail], null,
+        var username = toUsername(email);
+        var secretHash = calculateSecretHash(username, _config.cognito.userPoolClientId, _config.cognito.userPoolClientSecret);
+
+        userPool.signUp(username, password, [attributeEmail], null,
             function signUpCallback(err, result) {
                 if (!err) {
                     onSuccess(result);
                 } else {
                     onFailure(err);
                 }
-            }
+            },
+            secretHash
         );
     }
 
     function signin(email, password, onSuccess, onFailure) {
+        var username = toUsername(email);
+        var secretHash = calculateSecretHash(username, _config.cognito.userPoolClientId, _config.cognito.userPoolClientSecret);
+
         var authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails({
-            Username: toUsername(email),
-            Password: password
+            Username: username,
+            Password: password,
+            SecretHash: secretHash
         });
 
         var cognitoUser = createCognitoUser(email);
@@ -84,13 +97,16 @@ var WildRydes = window.WildRydes || {};
     }
 
     function verify(email, code, onSuccess, onFailure) {
+        var username = toUsername(email);
+        var secretHash = calculateSecretHash(username, _config.cognito.userPoolClientId, _config.cognito.userPoolClientSecret);
+
         createCognitoUser(email).confirmRegistration(code, true, function confirmCallback(err, result) {
             if (!err) {
                 onSuccess(result);
             } else {
                 onFailure(err);
             }
-        });
+        }, secretHash);
     }
 
     function createCognitoUser(email) {

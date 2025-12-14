@@ -27,9 +27,31 @@ var WildRydes = window.WildRydes || {};
     }
 
     // Function to calculate secret hash
-    function calculateSecretHash(username, clientId, clientSecret) {
-        return CryptoJS.HmacSHA256(username + clientId, clientSecret).toString(CryptoJS.enc.Base64);
+    // function calculateSecretHash(username, clientId, clientSecret) {
+    //     return CryptoJS.HmacSHA256(username + clientId, clientSecret).toString(CryptoJS.enc.Base64);
+    // }
+
+    // Replace the calculateSecretHash function with this:
+    async function calculateSecretHash(username, clientId, clientSecret) {
+        const message = username + clientId;
+        const key = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(clientSecret),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+        );
+        
+        const signature = await crypto.subtle.sign(
+            'HMAC',
+            key,
+            new TextEncoder().encode(message)
+        );
+        
+        // Convert to base64
+        return btoa(String.fromCharCode(...new Uint8Array(signature)));
     }
+
 
     WildRydes.signOut = function signOut() {
         userPool.getCurrentUser().signOut();
@@ -187,3 +209,4 @@ var WildRydes = window.WildRydes || {};
         );
     }
 }(jQuery));
+
